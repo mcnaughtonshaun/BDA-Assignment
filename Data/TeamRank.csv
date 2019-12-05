@@ -1,5 +1,5 @@
-Team,TeamRating,TeamRank
-1,12010,1
+Team,TeamRating,TeamRank, Nationality
+1,12010,1, TRUE
 40,11280,2
 64,10700,3
 56,9980,4
