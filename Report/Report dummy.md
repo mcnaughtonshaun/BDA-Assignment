@@ -17,18 +17,18 @@ Maybe some theory background about Rhat, prior distributions, loo ... ¿¿?¿?
 
 # Transformation of the data
 
-The normalization of ratings + sqrt_dif explanation 
+DONE
 
 
 # Model 1
 
-- Model explanation
+- Model explanation DONE
 
-- Description of the prior choices
+- Description of the prior choices 
 
-- Stan code
+- Stan code DONE
 
--Convergence diagnosis (Rhat)
+-Convergence diagnosis (Rhat) DONE
 
 - Posterior predictive checking (¿?¿?)
 
