@@ -1,6 +1,6 @@
 # Introduction 
 
-- Introduction (motivation of the project)
+## Introduction (motivation of the project)
 
 Sports prediction is a branch of statistics that has been growing in the last decade. This growth is related not only to the large monetary amounts involved in betting but also to the access to information that could mean a competitive advantage for certain teams. Due to the diversity that exists between sports, the projects will be focused to study couples tournmanets of tennis. The primary aim of this project is to describe two models that enable the prediction of tennis events. To establish a consistent approach, the methodology followed can be divided into different steps:
 
@@ -13,14 +13,14 @@ Sports prediction is a branch of statistics that has been growing in the last de
 
 asadsa
 
-- Tennis game and Wimbeldon explanation
+## Tennis game and Wimbeldon explanation
 
-- Dataset explanation (rating + Wimbeldon games)
+## Dataset explanation (rating + Wimbeldon games)
 
 
-- General view of the project:  "We will use two different models and compare their performance...
+## General view of the project:  "We will use two different models and compare their performance...
 
-- Literature Review (optional)
+## Literature Review (optional)
 
 # Background theory
 
