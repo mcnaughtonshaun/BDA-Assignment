@@ -13,7 +13,7 @@ Maybe some theory background about Rhat, prior distributions, loo ... ¿¿?¿?
 - Literature Review (optional)
 
 
-# Transformation of data
+# Transformation of the data
 
 The normalization of ratings + sqrt_dif explanation 
 
