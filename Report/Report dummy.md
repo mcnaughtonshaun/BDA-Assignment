@@ -11,7 +11,7 @@ We will focus on the championship of Wimbledon, the oldest and most prestigious 
 ## Dataset explanation (rating + Wimbeldon games)
 
 
-## General view of the project:  "We will use two different models and compare their performance...
+## General view of the project:  "We will use two different models and compare their performance..." + "parameters that we are considering relevant"+"why do we think rating is not 100% accurate" + ...
 
 ## Literature Review (optional)
 
