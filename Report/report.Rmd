@@ -1,4 +1,5 @@
 
+
 ---
 title: "BDA - Project Work"
 author: "Shaun McNaughton & Paul Sasieta"
@@ -147,10 +148,34 @@ fit_bern <- stan(file='codeM1.stan', data=data) # FIT THE MODEL
 
 \vspace{0.5cm}
 
-The obtained results by stan are $b = 0.15$ , $\sigma _{a} = 0.48$ , $\sigma _{y} = 0.45$, $a[13] = 0.17$, $a[3] = 0.11$ and $randif = -0.09$ Therefore, we assume that the signed squared root of set difference of the finals match satisfy
+The obtained results by stan are $b = 0.15$ , $\sigma _{a} = 0.48$ , $\sigma _{y} = 0.45$, $a[13] = 0.17$, $a[3] = 0.11$ and $randif = -0.09$. Therefore, we assume that the signed squared root of set difference of the finals match satisfy
 
 \begin{equation*}
 sqrt\_ dif \_ final \sim t_{7}(-0.09,0.45)
 \end{equation*}
 
 Sampling 10000 draws from this distribution, computing the mean of those sumples and then undoing the transformation translates in a expected value of -0.04 set diference in the final match. This means that the final is expected do be a close game and Team2 is expected to win it. Hence, the prediction would be 2-3.
+
+We now proceed to do a convergence analysis based on $\hat{R}$. We will be using the latest version of $\hat{R}$, which is an improved version of the traditional Rhat presented in  Eq. 11.4 in BDA3.
+
+// SHOW TABLE//
+
+As we can see in the table, the values of $\hat{R}$ obtained are very close to 1 so we can conclude that covnergence is happening. 
+
+
+\newpage
+
+# Model comparison and performance
+
+The question of which model is the best naturally arises. We will be using the staticstical approach of PSIS-LOO eldp values and $\hat{k}$ to determine wich of the models performs better. The loo function is being used to obtain that information. 
+
+\vspace{0.5cm}
+For the first model, the obtained values are the following.
+
+//SHOw A TABLE OF VALUES AND PLOT K-HAT//
+
+As we can see, most of the values of $\hat{k}$ are above 0.7 which translates on the values of the PSIS-LOO estimates not being reliable at all. 
+
+# Prior sensitivity
+
+We did not specify any prior for the parameters in any of the models. In Stan, not specifiying a prior is equivalent to specifiying an uniform prior. In order to study the behaviour of the inference under different priors, we will add weakly informative priors for $b$,$\sigma _{a}$ and $\sigma _{y}$.
