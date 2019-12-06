@@ -1,0 +1,156 @@
+
+---
+title: "BDA - Project Work"
+author: "Shaun McNaughton & Paul Sasieta"
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 1
+---
+
+```{r setup, include=FALSE}
+# This chunk just sets echo = TRUE as default (i.e. print all code)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+\newpage
+
+# Introduction
+
+# Transformation of the data
+
+The models we are fitting are based on the signed square root of the set differentials. Hence, the first step is to transform the set difference of each match.
+
+\begin{equation*}
+sqrt\_dif[i] = (step(dif[i])-.5)\sqrt {fabs(dif[i])}
+\end{equation*}
+
+where fabs() is the absolute value function and step() the 0-1 step function. The square rute models that when the game is less close, it becomes more impredictable. 
+
+On the other hand, each team has a prior ranking equal to the sum of the rating of each member. 
+\begin{equation*}
+rating (team) = rating (player1) + rating (player2) 
+\end{equation*}
+
+Therefore, team ratings represent values from 0 until 12010 and we considered reescalating those ratings. 
+
+\begin{equation*}
+team\_ranks = \frac{team\_ranks - m}{2\sigma} 
+\end{equation*}
+
+where m and $\sigma$ are the mean and standard deviation of $team\_ranks$ respectively. 
+
+\vspace{0.5cm}
+
+```{r, echo=TRUE, include = FALSE}
+library("rstan")
+library("loo")
+
+# Data reading from GitHub repo
+W2019players <- read.csv('https://raw.githubusercontent.com/mcnaughtonshaun/BDA-Assignment/master/Data/Wimbledon%202019%20Doubles%20Players%20240619.csv')
+W2019results <- read.csv('https://raw.githubusercontent.com/mcnaughtonshaun/BDA-Assignment/master/Data/Wimbledon%202019%20Match%20Results.csv')
+W2019teamrank <- read.csv('https://raw.githubusercontent.com/mcnaughtonshaun/BDA-Assignment/master/Data/TeamRank.csv')
+W2019playerteam <- read.csv('https://raw.githubusercontent.com/mcnaughtonshaun/BDA-Assignment/master/Data/PlayerTeam.csv')
+W2019teamresults <- read.csv('https://raw.githubusercontent.com/mcnaughtonshaun/BDA-Assignment/master/Data/TeamResult.csv')
+
+# Dropping the final match as we are trying to predict the winner
+W2019teamresults <- W2019teamresults[1:62,]
+
+
+# Ranking transformation
+ranks <- (W2019teamrank$TeamRating  - mean(W2019teamrank$TeamRating ))/(2*sd(W2019teamrank$TeamRating ))
+```
+
+
+```{r,echo = FALSE , fig.width = 4, fig.height= 3 , fig.align='center' }
+hist(ranks, main = "Re-escalated team ratings", xlab = "team rating" , ylab = "Frequency" , xlim = c(-1,2), col = "grey", breaks = 10)
+``` 
+ 
+
+We are now ready to fit our models. 
+
+# Model 1 
+
+We first model the skill of each team, simply doing 
+\begin{equation*}
+a_{i}\sim N(b*team\_rank[i]\text{ , }\sigma _{a})
+\end{equation*}
+
+where $b$ and $\sigma_{a}$ play parameter role in our model. Remark that we have chosen $sigma_{a}$ to be independent of the team. Also, the lower the $sigma_{a}$ value is the more representative the team rating is. 
+
+On the other hand, if team 1 and team 2 are playing against each other on match number i, we have the respective values of $sqrt\_dif$ representing set difference on that match. This set diferrence is tightly related to skill diference between the teams, so we used the following model:
+
+\begin{equation*}
+sqrt\_dif [i] \sim t_{7}(a[team1]-a[team2],\sigma _{y})
+\end{equation*}
+
+where $\sigma _{y}$ plays the role of a parameter in the model. The Stan code is the following. 
+
+\vspace{0.5cm}
+
+```{stan output.var='priors', eval = FALSE, tidy = FALSE}
+parameters {
+  real b;
+  real<lower=0> sigma_a;
+  real<lower=0> sigma_y;
+  vector[nteams] a;
+}
+model {
+  a ~ normal(b*prior_score, sigma_a);
+  for (i in 1:ngames)
+    sqrt_dif[i] ~ student_t(df, a[team1[i]]-a[team2[i]], sigma_y);
+}
+```
+
+\vspace{0.5cm}
+
+In conclusion, the model has three real parameters $b$,$\sigma _{a}$ and $\sigma _{y}$ and a vector parameter $a$ of length 64. The idea now is to predict the winner of the final match of the tournament using the obtained information. The team final was played between teams number 13 and 3. We will estimate the skill difference between these two teams sampling from their respective normal distribution modeling skill and computing the difference. Then, we will reconvert the value of those differences undoing the transformations. This is computed in the generated quantities block.
+
+```{stan output.var='priors', eval = FALSE, tidy = FALSE}
+generated quantities {
+  real team1rank;
+  real team2rank;
+  real rankdif;
+  vector[64] log_lik;
+
+  team1rank = normal_rng(b*prior_score[13],sigma_a);
+  team2rank = normal_rng(b*prior_score[3],sigma_a);
+  rankdif = team1rank - team2rank;
+}
+```
+
+
+\vspace{0.5cm}
+
+We now fit this model to our data.
+
+\vspace{0.5cm}
+
+```{r, eval = FALSE}
+# Model Data
+nteams = length(W2019teamrank$Team) #Number of teams
+ngames = 62                         #Number of games 
+prior_score = ranks                 #Team ratings
+team1 = W2019teamresults$Team1      #Team1 index
+team2 = W2019teamresults$Team2      #Team2 index
+score1 = W2019teamresults$SetT1     #Team1 number of sets
+score2 = W2019teamresults$SetT2     #Team2 number of sets
+df = 7  
+
+data <- list(nteams=nteams, ngames = ngames , team1 = team1 , score1 = score1 , 
+             team2=team2 , score2=score2 , prior_score=prior_score,df=df)
+
+fit_bern <- stan(file='codeM1.stan', data=data) # FIT THE MODEL 
+```
+
+
+\vspace{0.5cm}
+
+The obtained results by stan are $b = 0.15$ , $\sigma _{a} = 0.48$ , $\sigma _{y} = 0.45$, $a[13] = 0.17$, $a[3] = 0.11$ and $randif = -0.09$ Therefore, we assume that the signed squared root of set difference of the finals match satisfy
+
+\begin{equation*}
+sqrt\_ dif \_ final \sim t_{7}(-0.09,0.45)
+\end{equation*}
+
+Sampling 10000 draws from this distribution, computing the mean of those sumples and then undoing the transformation translates in a expected value of -0.04 set diference in the final match. This means that the final is expected do be a close game and Team2 is expected to win it. Hence, the prediction would be 2-3.
