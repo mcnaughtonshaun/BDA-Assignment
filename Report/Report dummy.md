@@ -8,9 +8,11 @@
 
 - General view of the project:  "We will use two different models and compare their performance...
 
-Maybe some theory background about Rhat, prior distributions, loo ... ¿¿?¿?
-
 - Literature Review (optional)
+
+# Background theory
+
+Maybe some theory background about Rhat, prior distributions, loo ... ¿¿?¿?
 
 
 # Transformation of the data
