@@ -27,7 +27,7 @@ CODE + GRAPHS
 
 # Conclusion
 
-- Model comparation
+- Model comparison
 
 - Conclusions
 
