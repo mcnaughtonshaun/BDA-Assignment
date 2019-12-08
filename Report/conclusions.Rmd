@@ -1,0 +1,29 @@
+---
+title: "BDA Project Work"
+author: "Shaun McNaughton & Paul Sasieta"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+# This chunk just sets echo = TRUE as default (i.e. print all code)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Conclusions
+
+To sum up, we have analyzed two different models to predict the outcome of the Wimbledon 2019 couples final match. Even though the obtained $\hat{k}$ values are high in both cases, we conclude that the first model is more appropiate for predictions. We must take into account the small size of the data set, consisting only of 63 matches. Therefore, using a complex model with a huge amount of parameters is infeasible. For example, we thought about using one $\sigma _{a}$ per team but convergence was not obtained. Overparamatrization, which refers to the number of parameters exceeding the size of the dataset, is a factor we have been dealing with. We think this is the reason a more simple model rather than the hierarchicality of the second model works better in this particular case. Remark that there is a uncertainty inherent in the problem, the sport would not be entretaining if we could predict it. This is one strong reason to understand why the models are not working extremely good. However, our intuition that we could estimate team abilities by modeling set differentials seems to be correct.
+The model does not add a lot of predictive power for most individual games, but it can rank the teams. The key is that each team plays multiple games. So for the purpose of estimating team ability, it’s ok if the model does not predict individual games well. We think that the obtained ratings of the teams before the final match are more meaninful than the ATP prior ratings. 
+
+
+About prior sensitivity, remark tha the estimates do not change much from modifying the sigma prior. There are several improvements that could be added to obtain better results. The prior rating of each team is computed just adding the rating of each individual. We believe that there are several factors that influence that prior rating and if atached the predictiong would improve. For example, if some player has some kind of little injury or if it is clearly out of shape are factors our rating system does not consider. The quality of the prior rating of the teams directly and notoriously affect prediction quality. It would also be interesting to try other sports, maybe considering a tournament with more matches. The framework can in principle be adapted to a wide range of sports domains. for example soccer world championship. Another approach to explore in the future is a Knowledge-based system. It is important to understand that each tennis match haves according to a particular environment. Therefore, a better prediction model should include particular features of the match game, such as the importance of the game. One possibility would be to define time-specific parameters, in order to account for periods of variable form of the teams (including injuries, shape, etc.). Moreover, prior information can be included at various level in the model, perhaps in the form of expert opinion about the strength of each team. Future work in this area also includes the use of different metrics for evaluating the quality of the result.
+
+
+
+
+
+
+
+
