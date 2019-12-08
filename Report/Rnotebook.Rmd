@@ -88,11 +88,22 @@ barplot(rating,
 
 The models we are fitting are based on Andrew Gelman's model to estimate the world cup. It uses the signed square root of a point differential. Hence, the first step is to transform the data and derive the set difference of each match.
 
+\vspace{0.5cm}
+
+```{r, echo = FALSE, eval = TRUE, results="hide", warning=FALSE, cache=TRUE}
+teams_setdif <- (W2019teamresults$SetT1 -  W2019teamresults$SetT2)
+barplot(table(teams_setdif),xlab="Match won set difference",ylab="Frequency")
+```
+
+One can see that most Mens' doubles matches in Wimbledon are decided in 3 sets. These results are typically because there are large differences in skill between the teams and the teams are seeded such that the highest rated teams only face each other late in the tournament. Therefore skill differential plays a large part in the results that we see.
+
+As such we take the square root of the difference in the set scores.
+
 \begin{equation*}
 sqrt\_dif[i] = 2*(step(dif[i])-.5)\sqrt {fabs(dif[i])}
 \end{equation*}
 
-where fabs() is the absolute value function and step() the 0-1 step function. The square root models that when the game is less close, it becomes more impredictable. 
+Where fabs() is the absolute value function and step() the 0-1 step function. The square root models that when the game is less close, it becomes more impredictable. 
 
 Our prior consists of individual player ratings, we take the sum of the player's individual ratings to derive a team rating. 
 
@@ -237,11 +248,12 @@ print(fit_bern1b,pars=c("b","sigma_a","sigma_y","a[3]","a[13]","rankdif"))
 
 The point estimates do not change much from modifying the sigma priors. Therefore it does not appear to matter strongly which prior we choose.
 
-\newpage
+\vspace{0.5cm}
+
 
 # Model 2
 
-In the second model we came up with a hypothesis that teams who share the same nationality, have some latent performance bonus that is not captured by team rating alone. As teams can be formed and broken apart fairly regularly. Tournament scores can instead reflect performance from multiple teams that a player might have had in the past. Players who share the same nationality, may perform differently than those who do not share similar cultural habits. To model this, we extracted the data from the Wimbledon's men's doubles teams and coded them as a true/false indicator.
+In the second model we came up with a hypothesis that teams who share the same nationality, have some latent performance bonus that is not captured by team rating alone. As teams can be formed and broken apart fairly regularly, it might be useful to be able to capture an element of team dynamic that might not be captured by looking at an individual's ATP ranking. Tournament scores can instead reflect performance from multiple teams that a player might have had in the past. Players who share the same nationality, may perform differently than those who do not share similar cultural habits. To model this, we extracted the data from the Wimbledon's men's doubles teams and coded them as a true/false indicator.
 
 To add this effect to the model this we fit the same model, but now use two parameters, sigma_a1 and sigma_a2. These reflect the spread of our ranking were teams who have same or different nationalities. This goes into the idea that the current team ranking model fails to capture some element of having a shared nationality.
 
@@ -330,7 +342,7 @@ The question of which model is better naturally arises. We will be using the sta
 
 For the first model, the obtained values are the following.
 
-```{r, eval = TRUE, results="hide", warning=FALSE, cache=TRUE, fig.width = 6, fig.height= 12 , fig.align='center'}
+```{r, eval = TRUE, echo=FALSE, results="hide", warning=FALSE, cache=TRUE, fig.width = 6, fig.height= 8 , fig.align='center'}
 par(mfrow=(c(3,1)))
 ll_m1_mat <- extract_log_lik(fit_bern1, parameter_name = "log_lik")
 fit_m1_loo <- loo(ll_m1_mat)
@@ -392,7 +404,7 @@ print(fit_bern1,pars=c("rankdif"))
 
 We can also look at the team quality estimate for teams to make sure that they align roughly with the ATP ranking.
 
-```{r, eval = TRUE, include=TRUE, fig.width = 4, fig.height= 10 , fig.align='center'}
+```{r, eval = TRUE, include=TRUE}
 teams <- W2019teamrank$Team
 teamsRank <- W2019teamrank$TeamRank
 
@@ -404,10 +416,52 @@ a_se <- sqrt(colVars(a_sims))
 # Appending the variables to a 
 teams.append <- data.frame(a_hat=a_hat,a_se=a_se,teams,teamsRank) 
 teams.sort <- teams.append[order(a_hat),]
-library ("arm")
+
+
+```
+
+We can also see how well the predictions were at estimating the completed matches.
+
+\vspace{0.5cm}
+
+```{r, eval = TRUE, echo=TRUE,include=TRUE}
+sims <- extract (fit_bern1)
+expected_on_sqrt_scale <- a_hat[team1] - a_hat[team2]
+sigma_y_sims <- sims$sigma_y
+interval_975 <- median(qt(.975,df)*sigma_y_sims)
+signed_square <- function (a) {sign(a)*a^2}
+lower <- signed_square(expected_on_sqrt_scale - interval_975)
+upper <- signed_square(expected_on_sqrt_scale + interval_975)
+a_sims <- sims$a
+sigma_y_sims <- sims$sigma_y
+nsims <- length(sigma_y_sims)
+random_outcome <- array(NA, c(nsims,ngames))
+for (s in 1:nsims){
+  random_outcome_on_sqrt_scale <- (a_sims[s,team1] - a_sims[s,team2]) + rt(ngames,df)*sigma_y_sims[s]
+  random_outcome[s,] <- signed_square(random_outcome_on_sqrt_scale)
+}
+sim_quantiles <- array(NA,c(ngames,2))
+for (i in 1:ngames){
+  sim_quantiles[i,] <- quantile(random_outcome[,i], c(.025,.975))
+}
+```
+
+\newpage
+
+```{r, eval = TRUE, echo=FALSE,include=TRUE, fig.width = 4, fig.height= 12 , fig.align='center'}
 # Sorted by estimated team rank #
 coefplot (teams.sort$a_hat, teams.sort$a_se, CI=1, varnames=teams.sort$teamsRank, 
           main="Team quality (estimate +/- 1 s.e.)\n", cex.var=.9, mar=c(0,4,5.1,2))
+```
+
+\newpage
+
+```{r, eval = TRUE, echo=FALSE,include=TRUE, fig.width = 4, fig.height= 12 , fig.align='center'}
+coefplot (rev(score1 - score2), sds=rep(0, ngames),
+          lower.conf.bounds=rev(sim_quantiles[,1]), upper.conf.bounds=rev(sim_quantiles[,2]), 
+          varnames=rev(paste(teams[team1], "vs.", teams[team2])),
+          main="Set score differentials\ncompared to 95% predictive interval from model\n",
+          mar=c(0,7,6,2))
 ```
 
 \vspace{0.5cm}
@@ -416,11 +470,15 @@ coefplot (teams.sort$a_hat, teams.sort$a_se, CI=1, varnames=teams.sort$teamsRank
 
 # Conclusions
 
-To sum up, we have analyzed two different models to predict the outcome of the Wimbledon 2019 couples final match. Even though the obtained $\hat{k}$ values are high in both cases, we conclude that the first model is more appropiate for predictions. We must take into account the small size of the data set, consisting only of 63 matches. Therefore, using a complex model with a huge amount of parameters is infeasible. For example, we thought about using one $\sigma _{a}$ per team but convergence was not obtained. Overparamatrization, which refers to the number of parameters exceeding the size of the dataset, is a factor we have been dealing with. We think this is the reason a more simple model rather than the hierarchicality of the second model works better in this particular case. Remark that there is a uncertainty inherent in the problem, the sport would not be entretaining if we could predict it. This is one strong reason to understand why the models are not working extremely good. However, our intuition that we could estimate team abilities by modeling set differentials seems to be correct.
+To sum up, we have analyzed two different models to predict the outcome of the Wimbledon 2019 couples final match. Even though the obtained $\hat{k}$ values are high in both cases, we conclude that the first model is more appropiate for predictions. We must take into account the small size of the data set, consisting only of 63 matches. Therefore, using a complex model with a huge amount of parameters is infeasible. For example, we thought about using one $\sigma _{a}$ per team but convergence was not obtained. Overparamatrization, which refers to the number of parameters exceeding the size of the dataset, is a factor we have been dealing with. We think this is the reason a more simple model rather than the hierarchical structure of the second model works better in this particular case. 
 
-The model does not add a lot of predictive power for most individual games, but it can rank the teams. The key is that each team plays multiple games. So for the purpose of estimating team ability, it’s ok if the model does not predict individual games well. We think that the obtained ratings of the teams before the final match are more meaninful than the ATP prior ratings. 
+It should be noted that there is an inherent uncertainty in the problem with so many potential factors affecting the outcome of the match (e.g. court temperature, if the team had a long match) . Sport would not be entertaining if we could fully  predict it with 100% accuracy. However, there is no harm is estimating who is more likely to win based on team abilities by modeling set differentials.
 
-About prior sensitivity, remark tha the estimates do not change much from modifying the sigma prior. There are several improvements that could be added to obtain better results. The prior rating of each team is computed just adding the rating of each individual. We believe that there are several factors that influence that prior rating and if atached the predictiong would improve. For example, if some player has some kind of little injury or if it is clearly out of shape are factors our rating system does not consider. The quality of the prior rating of the teams directly and notoriously affect prediction quality. It would also be interesting to try other sports, maybe considering a tournament with more matches. The framework can in principle be adapted to a wide range of sports domains. for example soccer world championship. Another approach to explore in the future is a Knowledge-based system. It is important to understand that each tennis match haves according to a particular environment. Therefore, a better prediction model should include particular features of the match game, such as the importance of the game. One possibility would be to define time-specific parameters, in order to account for periods of variable form of the teams (including injuries, shape, etc.). Moreover, prior information can be included at various level in the model, perhaps in the form of expert opinion about the strength of each team. Future work in this area also includes the use of different metrics for evaluating the quality of the result.
+The model does not add a lot of predictive power for most individual games, but it does provide some evidence that the ATP ranking is somewhat good at predicting an overall or long term team performance. So for the purpose of estimating team ability, it’s ok if the model does not predict individual games well. We think that the obtained ratings of the teams before the final match are more meaninful than the ATP prior ratings as it's indicative of their current form leading up to the finals. 
+
+About prior sensitivity, remark tha the estimates do not change much from modifying the sigma prior. There are several improvements that could be added to obtain better results. The prior rating of each team is computed just adding the rating of each individual. We believe that there are several factors that influence that prior rating and if atached the predictiong would improve. For example, if some player has some kind of little injury or if it is clearly out of shape are factors our rating system does not consider. The quality of the prior rating of the teams directly and notoriously affect prediction quality. It would also be interesting to try other sports, maybe considering a tournament with more matches. 
+
+Another approach to explore in the future is a Knowledge-based system. It is important to understand that each tennis match haves according to a particular environment. Therefore, a better prediction model should include particular features of the match game, such as the importance of the game, court specialization (clay court, grass court), weather conditions. One additional possibility would be to define time-specific parameters, in order to account for periods of variable form of the teams (including injuries, shape, etc.). Moreover, prior information can be included at various level in the model, perhaps in the form of expert opinion about the strength of each team. Future work in this area also includes the use of different metrics for evaluating the quality of the result.
 
 \newpage
 
