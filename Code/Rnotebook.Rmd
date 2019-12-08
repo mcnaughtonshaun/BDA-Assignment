@@ -1,0 +1,260 @@
+---
+title: "BDA Project Work"
+author: "Shaun McNaughton & Paul Sasieta"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+# This chunk just sets echo = TRUE as default (i.e. print all code)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+
+# Introduction
+
+Sports prediction is a branch of statistics that has been growing in the last decade. This growth is related not only to the large monetary amounts involved in betting but also to the access to information that could mean a competitive advantage for certain teams. Due to the diversity that exists between sports, the projects will be focused to study doubles tournmanets of tennis. More particularly, we will focus on Wimbledon 2019. The idea of the project is to use rating of each individual player together with set difference in previous matches of the tournament to estimate the outcome of future matches. The primary aim is to describe two models that enable the prediction of tennis events, but also to predict who wins the final. To establish a consistent approach, the methodology followed can be divided into different steps: data collection, model application and convergence and performance analysis.
+
+As you probably already know, tennis is a racket sport that can be played individually (singles) or between two teams of two players each (doubles). A tennis match is composed of points, games, and sets. A set consists of a number of games (a minimum of six), which in turn each consist of points. A set is won by the first side to win 6 games, with a margin of at least 2 games over the other side (e.g. 6–3 or 7–5). If the set is tied at six games each, a tie-break is usually played to decide the set. A match is won when a player or a doubles team has won the majority of the prescribed number of sets. Matches employ either a best-of-three or best-of-five set format.
+
+In professional tennis, the four Grand Slam tournaments are particularly popular: the Australian Open played on hard courts, the French Open played on red clay courts, Wimbledon played on grass courts, and the US Open also played in hard courts. These Grand Slams are organized as single-elimination tournaments, with competitors being eliminated after a single loss and Men's singles and doubles  matches following the best-of-five format. The brackets are seeded according to a recognised ranking system, in order to keep the best players in the field from facing each other until as late in the tournament as possible.
+
+We will focus on the championship of Wimbledon, the oldest and most prestigious tennis tournament in the world. The championship has five main events: gentlemen's singles, ladies' singles, gentlemen's doubles, ladies' doubles and mixed doubles. We will be using data from gentlemen's doubles Wimbledon 2019 tournament.
+
+# Aims
+
+The aim of this is to predict the outcome of the finals men's doubles match using results from the tournament and a team rating score, a representation of the skill level of the doubles team.
+
+While we are primarily interested in the outcome of a match (win/lose), knowing if a player/team completely outclasses another player/team is critical in understanding the variability of our prediction. A better player/team is not only expected to win against a weaker player/team, but is expected to win by a larger margin (3-0).
+
+Winning in close match (3-2), typically has implications for the prediction of following match, as these matches can be long and can also be physically and mentally draining. This leads to a time effect where one close match can have a negative follow on effects on subsequent matches. While our model does not take this into account, it could be extended on if we wish to construct a full tournament prediction.
+
+# Datasets
+
+The player rating dataset comes from the [Association of Tennis Professional (ATP) website](https://www.atptour.com/en/rankings/doubles?rankDate=2019-06-24&rankRange=0-100) on players ratings. Specifically we look at the men's doubles player rating in the week prior to Wimbledon 2019.
+
+The doubles player rating is derived from the amount of tournament points accumulated from a 12 month rolling window. Winning an associated ATP event will grant tournament points to the player, with the winners taking the largest share of the tournament points and the amount decreases the lower placement the team reaches. The total amount of tournament points won are determined by the ATP and the four Grand Slam Tournaments are heavily weighted in the points system.
+
+The tournament match result data comes from [Wimbledon's website](https://www.wimbledon.com/en_GB/scores/results/). This details who is on which team, which team won and by how much. As Wimbledon is run in an elimination round format, teams who lose on the first round only play once, where the teams that reach the final play 5 games. This has the added consequence that the teams that play fewer games rely on the initial team rating more than the teams that win.
+
+# Transformation of the data
+
+The models we are fitting are based on the signed square root of the set differentials. Hence, the first step is to transform the set difference of each match.
+
+\begin{equation*}
+sqrt\_dif[i] = (step(dif[i])-.5)\sqrt {fabs(dif[i])}
+\end{equation*}
+
+where fabs() is the absolute value function and step() the 0-1 step function. The square root models that when the game is less close, it becomes more impredictable. 
+
+Our prior consists of individual player ratings, we take the sum of the player's individual ratings to derive a team rating. 
+
+\begin{equation*}
+rating (team) = rating (player1) + rating (player2) 
+\end{equation*}
+
+Team ratings represent values from 0 until 12010 and are then scaled into a $N(0,1)$ distibution, to get an indicative measure of team skills. It is this scaled rating that becomes the prior.
+
+\begin{equation*}
+team\_ranks = \frac{team\_ranks - m}{2\sigma} 
+\end{equation*}
+
+where $m=0$ and $\sigma = 1$. 
+
+\vspace{0.5cm}
+
+```{r, echo=TRUE, include = FALSE}
+library("rstan")
+library("loo")
+library("matrixStats")
+library("arm")
+
+# Data reading from GitHub repo
+W2019players <- read.csv('https://raw.githubusercontent.com/mcnaughtonshaun/BDA-Assignment/master/Data/Wimbledon%202019%20Doubles%20Players%20240619.csv')
+W2019results <- read.csv('https://raw.githubusercontent.com/mcnaughtonshaun/BDA-Assignment/master/Data/Wimbledon%202019%20Match%20Results.csv')
+W2019teamrank <- read.csv('https://raw.githubusercontent.com/mcnaughtonshaun/BDA-Assignment/master/Data/TeamRank.csv')
+W2019playerteam <- read.csv('https://raw.githubusercontent.com/mcnaughtonshaun/BDA-Assignment/master/Data/PlayerTeam.csv')
+W2019teamresults <- read.csv('https://raw.githubusercontent.com/mcnaughtonshaun/BDA-Assignment/master/Data/TeamResult.csv')
+
+# Dropping the final match as we are trying to predict the winner
+W2019teamresults <- W2019teamresults[1:62,]
+
+
+# Ranking transformation
+ranks <- (W2019teamrank$TeamRating  - mean(W2019teamrank$TeamRating ))/(2*sd(W2019teamrank$TeamRating ))
+```
+
+
+```{r,echo = FALSE , fig.width = 4, fig.height= 3 , fig.align='center' }
+hist(ranks, main = "Rescaled team ratings", xlab = "team rating" , ylab = "Frequency" , xlim = c(-1,2), col = "grey", breaks = 10)
+``` 
+ 
+We are now ready to fit our models. 
+
+# Model 1 
+
+We first model the skill of each team, simply doing 
+\begin{equation*}
+a_{i}\sim N(b*team\_rank[i]\text{ , }\sigma _{a})
+\end{equation*}
+
+where $b$ and $\sigma_{a}$ play parameter role in our model. Remark that we have chosen $sigma_{a}$ to be independent of the team. Also, the lower the $sigma_{a}$ value is the more representative the team rating is. 
+
+On the other hand, if team 1 and team 2 are playing against each other on match number i, we have the respective values of $sqrt\_dif$ representing set difference on that match. This set diferrence is tightly related to skill diference between the teams, so we used the following model:
+
+\begin{equation*}
+sqrt\_dif [i] \sim t_{7}(a[team1]-a[team2],\sigma _{y})
+\end{equation*}
+
+where $\sigma _{y}$ plays the role of a parameter in the model. The Stan code is the following. 
+
+\vspace{0.5cm}
+
+```{stan output.var='priors', eval = FALSE, tidy = FALSE}
+parameters {
+  real b;
+  real<lower=0> sigma_a;
+  real<lower=0> sigma_y;
+  vector[nteams] a;
+}
+model {
+  a ~ normal(b*prior_score, sigma_a);
+  for (i in 1:ngames)
+    sqrt_dif[i] ~ student_t(df, a[team1[i]]-a[team2[i]], sigma_y);
+}
+```
+
+\vspace{0.5cm}
+
+In conclusion, the model has three real parameters $b$,$\sigma _{a}$ and $\sigma _{y}$ and a vector parameter $a$ of length 64. The idea now is to predict the winner of the final match of the tournament using the obtained information. The team final was played between teams number 13 and 3. We will estimate the skill difference between these two teams sampling from their respective normal distribution modeling skill and computing the difference. Then, we will reconvert the value of those differences undoing the transformations. This is computed in the generated quantities block.
+
+```{stan output.var='priors', eval = FALSE, tidy = FALSE}
+generated quantities {
+  real team1rank;
+  real team2rank;
+  real rankdif;
+  vector[64] log_lik;
+
+  team1rank = normal_rng(b*prior_score[13],sigma_a);
+  team2rank = normal_rng(b*prior_score[3],sigma_a);
+  rankdif = team1rank - team2rank;
+}
+```
+
+
+\vspace{0.5cm}
+
+We now fit this model to our data.
+
+\vspace{0.5cm}
+
+```{r, eval = FALSE, results="hide", warning=FALSE, cache=TRUE}
+# Model Data
+nteams = length(W2019teamrank$Team) #Number of teams
+ngames = 62                         #Number of games 
+prior_score = ranks                 #Team ratings
+team1 = W2019teamresults$Team1      #Team1 index
+team2 = W2019teamresults$Team2      #Team2 index
+score1 = W2019teamresults$SetT1     #Team1 number of sets
+score2 = W2019teamresults$SetT2     #Team2 number of sets
+df = 7  
+
+data <- list(nteams=nteams, ngames = ngames , team1 = team1 , score1 = score1 , 
+             team2=team2 , score2=score2 , prior_score=prior_score,df=df)
+
+fit_bern1 <- stan(file='codeM1.stan', data=data)
+```
+
+\vspace{0.5cm}
+
+The obtained results by stan are $b = 0.15$ , $\sigma _{a} = 0.88$ , $\sigma _{y} = 0.83$, $a[13] = 0.17$, $a[3] = 0.11$ and $randif = -0.09$. Therefore, we assume that the signed squared root of set difference of the finals match satisfy
+
+\begin{equation*}
+sqrt\_ dif \_ final \sim t_{7}(-0.09,0.83)
+\end{equation*}
+
+Sampling 10,000 draws from this distribution, computing the mean of those samples and then undoing the transformation translates in a expected value of -0.04 set diference in the final match. This means that the final is expected do be a close game and Team2 is expected to win it. Hence, the prediction would be 2-3.
+
+We now proceed to do a convergence analysis based on $\hat{R}$. We will be using the latest version of $\hat{R}$, which is an improved version of the traditional Rhat presented in  Eq. 11.4 in BDA3.
+
+```{r, eval = FALSE,CACHE=TRUE}
+print(fit_bern1,pars=c("b","sigma_a","sigma_y","a[1]","a[2]",
+                       "a[3]","a[62]","a[63]","a[64]"))
+```
+
+As we can see in the table, the values of $\hat{R}$ obtained are very close to 1 so we can conclude that connvergence is happening. 
+
+# Model performance
+
+```{r, eval = FALSE}
+# Finals prediction estimates #
+# Model 1 #
+pred_fit <- extract(fit_bern1)
+fin_dif <- get_posterior_mean(fit_bern1,par=c("rankdif"))
+# a[13] - a[3] #
+pred_draw <- rt(10000,7)
+pred_rankdif <- fin_dif + sqrt(0.45)*pred_draw
+sqrt_dif_find_ptpred <- ((abs(mean(pred_rankdif)) * 2)^2)* sign(mean(pred_rankdif))
+sqrt_dif_find <- ((abs(pred_rankdif) * 2)^2)* sign(pred_rankdif)
+hist(pred_rankdif,xlim=c(-3,3),breaks=100)
+print(fit_bern1,pars=c("rankdif"))
+
+```
+
+We can look at the estimates of team quality. As we expected, the teams who have the highest estimate are in the top half. Of note are the two at the top, teams 9 and 32.
+
+We also test a few weak priors to see if it affects the estimates.
+```{r, eval = FALSE}
+# Cauchy priors
+fit_bern1cauchy <- stan(file='codeM1B.stan', data=data)
+
+```
+
+\newpage
+
+# Model 2
+
+In the second model we came up with a hypothesis that teams who share the same nationality, have some latent performance bonus that is not captured by team rating alone. As teams can be formed and broken apart fairly regularly. Tournament scores can instead reflect performance from multiple teams that a player might have had in the past. Players who share the same nationality, may perform differently than those who do not share similar cultural habits. To model this, we extracted the data from the Wimbledon's men's doubles teams and coded them as a true/false indicator.
+
+To add this effect to the model this we fit the same model, but now use two parameters, sigma_a1 and sigma_a2. These reflect the spread of our ranking were teams who have same or different nationalities. This goes into the idea that the current team ranking model fails to capture some element of having a shared nationality.
+
+```{r, eval = FALSE}
+model {
+  a ~ normal(b*prior_score,sigma_a1*nationality + (1 - nationality)*sigma_a2);
+  for (i in 1:ngames)
+    sqrt_dif[i] ~ student_t(df, a[team1[i]]-a[team2[i]], sigma_y);
+}
+```
+
+After fitting the model and checking for convergence.
+
+```{r, eval = FALSE}
+fit_bern1 <- stan(file='codeM2.stan', data=data)
+```
+
+Sampling 10,000 draws from this distribution, computing the mean of those sumples and then undoing the transformation translates in a expected value of -?? for the final match.
+
+# Model comparison and performance
+
+The question of which model is better naturally arises. We will be using the staticstical approach of PSIS-LOO eldp values and $\hat{k}$ to determine wich of the models performs better. The loo function is being used to obtain that information. 
+
+\vspace{0.5cm}
+For the first model, the obtained values are the following.
+
+```{r, eval = FALSE, cache=TRUE}
+plot(fit_bern1,main="Model 1")
+stan_hist(fit_bern1,pars="rankdif")
+```
+
+//SHOw A TABLE OF VALUES AND PLOT K-HAT//
+
+
+
+As we can see, most of the values of $\hat{k}$ are above 0.7 which translates on the values of the PSIS-LOO estimates not being reliable at all. 
+
+# Prior sensitivity
+
+We did not specify any prior for the parameters in any of the models. In Stan, not specifiying a prior is equivalent to specifiying an uniform prior. In order to study the behaviour of the inference under different priors, we will add weakly informative priors for $b$,$\sigma _{a}$ and $\sigma _{y}$.
